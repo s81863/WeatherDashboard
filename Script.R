@@ -294,7 +294,7 @@ callAPI <- function(lat, lon) {
                 lat,
                 "&lon=",
                 lon,
-                "&cnt=1", "&lang=de", "&appid=d53ff6bc54858e25d7bbd981630249e8")
+                "&cnt=1", "&lang=de", "<API-KEY>")
   tryCatch({
     res <- GET(uri)
     if (res$status_code != 200) {
