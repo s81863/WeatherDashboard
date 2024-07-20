@@ -1,0 +1,23 @@
+{
+"type": "FeatureCollection",
+"name": "stations",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"features": [
+{ "type": "Feature", "properties": { "name": "Berlin-Dahlem (FU)", "number": "0403", "height": 55.0 }, "geometry": { "type": "Point", "coordinates": [ 13.3017, 52.4537 ] } },
+{ "type": "Feature", "properties": { "name": "Bremen", "number": "0691", "height": 4.0 }, "geometry": { "type": "Point", "coordinates": [ 8.6011, 53.0451 ] } },
+{ "type": "Feature", "properties": { "name": "Dresden-Hosterwitz", "number": "0150", "height": 112.0 }, "geometry": { "type": "Point", "coordinates": [ 13.847, 51.0221 ] } },
+{ "type": "Feature", "properties": { "name": "Düsseldorf", "number": "1078", "height": 37.0 }, "geometry": { "type": "Point", "coordinates": [ 6.7686, 51.296 ] } },
+{ "type": "Feature", "properties": { "name": "Erfurt-Weimar", "number": "1270", "height": 316.0 }, "geometry": { "type": "Point", "coordinates": [ 10.9608, 50.9829 ] } },
+{ "type": "Feature", "properties": { "name": "Hamburg-Fuhlsbüttel", "number": "1975", "height": 11.0 }, "geometry": { "type": "Point", "coordinates": [ 9.9881, 53.6332 ] } },
+{ "type": "Feature", "properties": { "name": "Hannover", "number": "2014", "height": 55.0 }, "geometry": { "type": "Point", "coordinates": [ 9.6779, 52.4644 ] } },
+{ "type": "Feature", "properties": { "name": "Kiel-Holtenau", "number": "2564", "height": 28.0 }, "geometry": { "type": "Point", "coordinates": [ 10.1424, 54.3776 ] } },
+{ "type": "Feature", "properties": { "name": "Magdeburg", "number": "3126", "height": 79.0 }, "geometry": { "type": "Point", "coordinates": [ 11.5827, 52.1029 ] } },
+{ "type": "Feature", "properties": { "name": "Mainz-Lerchenberg (ZDF)", "number": "3137", "height": 199.0 }, "geometry": { "type": "Point", "coordinates": [ 8.2049, 49.9658 ] } },
+{ "type": "Feature", "properties": { "name": "München-Stadt", "number": "3379", "height": 515.0 }, "geometry": { "type": "Point", "coordinates": [ 11.5429, 48.1632 ] } },
+{ "type": "Feature", "properties": { "name": "Potsdam", "number": "3987", "height": 81.0 }, "geometry": { "type": "Point", "coordinates": [ 13.0622, 52.3812 ] } },
+{ "type": "Feature", "properties": { "name": "Saarbrücken-Ensheim", "number": "4336", "height": 319.0 }, "geometry": { "type": "Point", "coordinates": [ 7.1077, 49.2128 ] } },
+{ "type": "Feature", "properties": { "name": "Schwerin", "number": "4625", "height": 59.0 }, "geometry": { "type": "Point", "coordinates": [ 11.3871, 53.6424 ] } },
+{ "type": "Feature", "properties": { "name": "Stuttgart (Schnarrenberg)", "number": "4928", "height": 314.0 }, "geometry": { "type": "Point", "coordinates": [ 9.2, 48.8281 ] } },
+{ "type": "Feature", "properties": { "name": "Wiesbaden-Auringen", "number": "5541", "height": 263.0 }, "geometry": { "type": "Point", "coordinates": [ 8.3169, 50.1321 ] } }
+]
+}
