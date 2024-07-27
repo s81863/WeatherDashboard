@@ -5,12 +5,11 @@ library(tidyverse)
 library(dplyr)
 library(lubridate)
 library(ggthemes)
-library(ggthemr)
+#library(ggthemr)
 library(shinyWidgets)
 library(plotly)
 library(stringr)
 library(shinythemes)
-library(ggHoriPlot)
 library(bslib)
 library(leaflet)
 library(leaflet.extras)
@@ -21,6 +20,9 @@ library(DT)
 library(httr)
 library(jsonlite)
 library(conflicted)
+library(scales)
+library(shinycssloaders)
+library(waiter)
 
 
 # Pakete bei bestimmten Funktionen vorziehen
@@ -94,7 +96,6 @@ mean_over_time <- function(data, start, end, column_filter, is_month = FALSE, mo
 
 ## Funktion zum präprozessieren der Datensätze==================================
 preprocess_climate_data <- function(data) {
-
   data <- data %>%
     mutate(
       Date = as.Date(as.character(MESS_DATUM), format = "%Y%m%d"),
@@ -112,9 +113,8 @@ preprocess_climate_data <- function(data) {
     inner_join(sufficient_months %>% filter(has_sufficient), by = "Jahr") %>%
     select(-has_sufficient)
   
-  # Fehlende Werte durch Mittelwerte ersetzen
-  replace_with_average <- function(df, column) {
-
+  # Funktion zum Ersetzen fehlender Werte oder Setzen auf NA
+  replace_missing_values <- function(df, column) {
     df$date_id <- paste(df$Monat, df$Tag, sep = "-")
     
     missing_counts <- df %>%
@@ -130,9 +130,11 @@ preprocess_climate_data <- function(data) {
       left_join(averages, by = "date_id") %>%
       left_join(missing_counts, by = "Jahr")
     
-    df[[column]] <- ifelse(df[[column]] == -999 & df$missing_count < 60,
-                           df$avg_value,
-                           df[[column]])
+    df[[column]] <- case_when(
+      df$missing_count >= 60 ~ NA_real_,
+      df[[column]] == -999 ~ df$avg_value,
+      TRUE ~ as.numeric(df[[column]])
+    )
     
     # Datensatz aufräumen
     df %>%
@@ -144,7 +146,7 @@ preprocess_climate_data <- function(data) {
   
   # Ersetzung auf jede Spalte anwenden
   for (col in columns_to_process) {
-    valid_data <- replace_with_average(valid_data, col)
+    valid_data <- replace_missing_values(valid_data, col)
   }
   
   processed_data <- valid_data %>%
@@ -152,8 +154,6 @@ preprocess_climate_data <- function(data) {
       Day = Date,
       Date_without_year = make_date(year = 2000, month = Monat, day = Tag),
       Monat_german = factor(month_names_german[Monat], levels = month_names_german),
-      across(all_of(columns_to_process), 
-             ~if_else(.x == -999, NA_real_, as.numeric(.x))),
       Regentag = if_else(!is.na(RSK) & RSK >= 0.1, 1L, 0L),
       Sommertag = if_else(!is.na(TXK) & TXK >= 25, 1L, 0L),
       Hitzetag = if_else(!is.na(TXK) & TXK >= 30, 1L, 0L),
@@ -262,6 +262,7 @@ create_weather_tile <- function(title, value, icon_name, color, tooltip, type = 
                             }
                             compass
                           },
+                          "precip" = paste(value, "mm/h"),
                           tags$p(value, style = "font-size: 18px; font-weight: bold; margin: 5px 0;")
   )
   
@@ -294,7 +295,7 @@ callAPI <- function(lat, lon) {
                 lat,
                 "&lon=",
                 lon,
-                "&cnt=1", "&lang=de", "<API-KEY>")
+                "&cnt=1", "&lang=de", "&appid=<APIKey>")
   tryCatch({
     res <- GET(uri)
     if (res$status_code != 200) {
@@ -442,6 +443,9 @@ calculate_max_sunshine_duration <- function(latitude, year) {
 
 # UI definieren=================================================================
 ui <- page_sidebar(
+  use_waiter(),
+  autoWaiter(),
+  waiterShowOnLoad(),
   theme = bs_theme(version = 5, bootswatch = "darkly"),
   tags$head(
     tags$style(HTML("
@@ -489,7 +493,7 @@ ui <- page_sidebar(
         style = "margin-right: 10px;"
       ),
       a(
-        href = "https://www.berlin.de/",
+        href = "https://www.bht-berlin.de/",
         target = "_blank",
         img(
           src = "BHT_Logo_horizontal_Negativ_RGB_288ppi.png",
@@ -758,8 +762,10 @@ server <- function(input, output) {
   
 ## Leaflet-Karte================================================================  
   output$map <- renderLeaflet({
-    leaflet(options = leafletOptions(zoomControl = FALSE)) %>%
+    bbox <- st_bbox(dts)
+    leaflet(options = leafletOptions(zoomControl = FALSE, minZoom = 5)) %>%
       setView(lng = 11.03, lat = 51.26, zoom = 5) %>%
+      setMaxBounds(lng1 = bbox["xmin"], lat1 = bbox["ymin"], lng2 = bbox["xmax"], lat2 = bbox["ymax"]) %>%
       addPolylines(data = dts,
                    color = "White",
                    stroke = TRUE,
@@ -957,6 +963,8 @@ server <- function(input, output) {
         paste0("Mittlere ", input$Monat, "temperaturen ", min(df$Jahr), "-", max(df$Jahr))
       }
       daily_averages_year <- NULL
+      df <- df %>%
+        filter(TMK != 0 & TXK != 0 & TNK != 0)
     }
     
     text <- if (input$monatOption == "all") {
@@ -1087,6 +1095,8 @@ server <- function(input, output) {
     } else {
       date_breaks <- "5 year"
       date_labels <- "%Y"
+      df <- df %>%
+        filter(value != 0)
     }
     
     ggplot(df, aes(Day, y = Cat, fill = value)) +
@@ -1096,10 +1106,11 @@ server <- function(input, output) {
                    date_labels = date_labels,
                    name = "",
                    expand = c(0.01, 0)) +
+      scale_y_discrete(labels = c("Tiefsttemp.", "Mittlere Temp.", "Höchsttemp.")) +
       theme(
         text = element_text(colour = "white"),
         plot.title = element_text(size = 16, family = "Arial"),
-        axis.text.y = element_blank(),
+        axis.text.y = element_text(colour = "white", angle = 45),
         axis.title.y = element_blank(),
         axis.text.x = element_text(colour = "white", family = "Courier", size = 12),
         legend.background = element_rect(fill = "transparent", color = NA),
@@ -1113,7 +1124,7 @@ server <- function(input, output) {
         legend.margin=margin(0,0,0,0),
         legend.box.spacing = unit(0, "pt"),
         legend.key.width=unit(3,"cm"),
-        plot.margin = unit(c(0,0.7,0,1.7), "cm")
+        plot.margin = unit(c(0,0.7,0,0), "cm")
       )
     
   })
@@ -1315,13 +1326,46 @@ server <- function(input, output) {
       df <- df %>% filter(RSK != 0)
     }
     
-    int_labels <- function(x) {
-      as.integer(x)
+    # Custom transformation function
+    precip_trans <- function() {
+      scales::trans_new(
+        name = "precip",
+        transform = function(x) ifelse(x == 0, 0, log1p(x)),
+        inverse = function(x) expm1(x),
+        breaks = function(x) {
+          brks <- c(0, 0.1, 0.5, 1, 2, 5, 10, 20, 50)
+          brks[brks <= max(x)]
+        }
+      )
+    }
+    
+    max_precip <- max(df$RSK, na.rm = TRUE)
+    
+    if (input$monatOption != "all") {
+      fill_scale <- scale_fill_gradientn(
+        colors = rev(hcl.colors(20, "YlGnBu")),
+        name = "Niederschlag (mm)",
+        trans = precip_trans(),
+        breaks = c(0, 0.1, 0.5, 1, 2, 5, 10, 20, 50),
+        labels = c(0, 0.1, 0.5, 1, 2, 5, 10, 20, 50),
+        limits = c(0, max_precip),
+        na.value = "grey50"
+      )
+    } else {
+      fill_scale <- scale_fill_gradientn(
+        colors = rev(hcl.colors(20, "YlGnBu")),
+        name = "Niederschlag (mm)",
+        trans = "log",
+        breaks = scales::breaks_log(n = 5),
+        labels = scales::label_number(accuracy = 0.1),
+        limits = c(min(df$RSK[df$RSK > 0], na.rm = TRUE), max_precip),
+        na.value = "grey50"
+      )
     }
     
     plot <- ggplot(df, aes(Day, NA, fill = RSK)) +
       geom_tile() +
-      scale_fill_gradientn(colors = rev(hcl.colors(20, "YlGnBu")), name = "Niederschlag (mm)", trans = "log2", labels = int_labels) +
+      fill_scale +
       scale_x_date(date_breaks = date_breaks,
                    date_labels = date_labels,
                    name = "",
@@ -1340,9 +1384,9 @@ server <- function(input, output) {
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         legend.position = "bottom", 
-        legend.margin=margin(0,0,0,0),
+        legend.margin = margin(0,0,0,0),
         legend.box.spacing = unit(0, "pt"),
-        legend.key.width=unit(3,"cm")
+        legend.key.width = unit(3,"cm")
       )
     if (input$monatOption != "all") {
       plot <- plot + 
@@ -2046,6 +2090,7 @@ server <- function(input, output) {
           Tropennaechte = sum(Tropennacht == 1, na.rm = T),
           Frosttage = sum(Frosttag == 1, na.rm = T),
           Eistage = sum(Eistag == 1, na.rm = T),
+          Schneetage = sum(Schneetag == 1, na.rm = TRUE),
           Heiteretage = sum(Heiterertag == 1, na.rm = T),
           Truebetage = sum(Truebertag == 1, na.rm = T),
           Day = unique(Jahr),
@@ -2063,7 +2108,7 @@ server <- function(input, output) {
       
       if (input$dataTableMonat == "") {
         df <- df %>%
-          select(Day, TNK, TMK, TXK, RSK, SDK, NM, Sommertage, Hitzetage, Tropennaechte, Frosttage, Eistage, Regentage, Heiteretage, Truebetage, Maximale_Trockenperiode, Maximale_Regenperiode) %>%
+          select(Day, TNK, TMK, TXK, RSK, SDK, NM, Sommertage, Hitzetage, Tropennaechte, Frosttage, Eistage, Regentage, Schneetage, Heiteretage, Truebetage, Maximale_Trockenperiode, Maximale_Regenperiode) %>%
           transmute(Jahr = year(Day),
                     Tagesttiefsttemperatur = round(TNK, 1),
                     Tagesmitteltemperatur = round(TMK, 1),
@@ -2079,12 +2124,13 @@ server <- function(input, output) {
                     !!enc2utf8("Heitere Tage") := Heiteretage,
                     !!enc2utf8("Trübe Tage") := Truebetage,
                     Regentage = Regentage,
+                    Schneetage = Schneetage,
                     Maximale_Trockenperiode = Maximale_Trockenperiode,
                     Maximale_Regenperiode = Maximale_Regenperiode)
       }
       else {
         df <- df %>%
-          select(Day, TNK, TMK, TXK, RSK, SDK, NM, Sommertage, Hitzetage, Tropennaechte, Frosttage, Eistage, Regentage, Heiteretage, Truebetage) %>%
+          select(Day, TNK, TMK, TXK, RSK, SDK, NM, Sommertage, Hitzetage, Tropennaechte, Frosttage, Eistage, Regentage, Schneetage, Heiteretage, Truebetage) %>%
           transmute(Monat_Jahr = paste(input$dataTableMonat, year(Day)),
                     Tagesttiefsttemperatur = round(TNK, 1),
                     Tagesmitteltemperatur = round(TMK, 1),
@@ -2098,6 +2144,7 @@ server <- function(input, output) {
                     Frosttage = Frosttage,
                     Eistage = Eistage,
                     Regentage = Regentage,
+                    Schneetage = Schneetage,
                     !!enc2utf8("Heitere Tage") := Heiteretage,
                     !!enc2utf8("Trübe Tage") := Truebetage)
       }
@@ -2110,7 +2157,7 @@ server <- function(input, output) {
                 pageLength = 10,
                 scrollX = TRUE,
                 autoWidth = FALSE,
-                buttons = c('copy', 'csv', 'excel', 'pdf', 'print'),
+                buttons = list('copy', 'csv', 'excel', list(extend = 'pdf', orientation = 'landscape', pageSize = 'A3'), 'print'),
                 fixedHeader = TRUE,
                 searchBuilder = TRUE,
                 dom = '<"top"Ql>Bfrtip',
@@ -2159,7 +2206,7 @@ server <- function(input, output) {
                       create_weather_tile(title = "Luftdruck", value = wetter$press, icon_name = "tachometer-alt", color = "#4CAF50", tooltip = "Atmosphärendruck", type = "pressure"),
                       create_weather_tile(title = "Luftfeuchtigkeit", value = wetter$humid, icon_name = "tint", color = "#2196F3", tooltip = "Relative Luftfeuchtigkeit", type = "humidity"),
                       create_weather_tile(title = "Wind", value = wetter$winddir, icon_name = "compass", color = "#795548", tooltip = "Windrichtung und -Geschwindigkeit", type = "wind_direction", wind_speed = wetter$wind*3.6),
-                      if (!is.null(wetter$rain)) create_weather_tile(title = "Regen", value = ifelse(!is.na(wetter$rain), wetter$rain, "Aktuell kein Regen"), icon_name = "cloud-rain", color = "#607D8B", tooltip = "Niederschlag pro Stunde") else NULL
+                      if (!is.null(wetter$rain)) create_weather_tile(title = "Regen", type = "precip", value = ifelse(!is.na(wetter$rain), wetter$rain, "0,0"), icon_name = "cloud-rain", color = "#607D8B", tooltip = "Niederschlag pro Stunde") else NULL
              )
       )
     )
@@ -2341,8 +2388,7 @@ server <- function(input, output) {
     map
     
   })
-  
-  
+  waiter_hide()
 }
 
 shinyApp(ui = ui, server = server)
